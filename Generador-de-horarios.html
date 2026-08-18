@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generador de Horarios con Compartición y Edición</title>
+  <!-- Librería para comprimir en URL (lz-string) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <!-- Librería para exportar a imagen -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    /* ===== Variables y estilos base (igual que antes) ===== */
+    :root {
+      --primary: #1e40af;
+      --primary-hover: #1e3a8a;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --border: #cbd5e1;
+      --success: #0b7e4b;
+      --error: #b91c1c;
+      --radius: 12px;
+      --warning: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1, h2, h3 { color: #1e293b; margin-top: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
+    }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+    .required::after { content: " *"; color: var(--error); }
+    input, select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .row-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: var(--primary-hover); }
+    button:active { transform: scale(0.97); }
+    .btn-block { width: 100%; margin-top: 8px; }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-success { background: #0b7e4b; }
+    .btn-success:hover { background: #065f36; }
+    .btn-warning { background: #d97706; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-edit { background: #0d9488; }
+    .btn-edit:hover { background: #0f766e; }
+    .btn-share { background: #7c3aed; }
+    .btn-share:hover { background: #6d28d9; }
+
+    .feedback {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-weight: 500;
+      display: none;
+    }
+    .feedback.error { background: #fee2e2; color: var(--error); border-left: 4px solid var(--error); display: block; }
+    .feedback.success { background: #d1fae5; color: var(--success); border-left: 4px solid var(--success); display: block; }
+    .feedback.warning { background: #fef3c7; color: var(--warning); border-left: 4px solid var(--warning); display: block; }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 6px 0 10px;
+    }
+    .toggle-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .toggle-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    .course-card {
+      background: #f1f5f9;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid var(--primary);
+    }
+    .badge {
+      display: inline-block;
+      background: #e2e8f0;
+      color: #1e293b;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin: 2px;
+    }
+    .badge-group { background: #dbeafe; color: #1e40af; font-weight: 600; }
+    .badge-remove { cursor: pointer; color: #dc2626; font-weight: bold; margin-left: 4px; }
+
+    .stats-box {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .warning-box {
+      background: #fef3c7;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin: 4px 0 12px;
+      font-size: 0.8rem;
+    }
+    .summary-box {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 6px;
+      margin: 6px 0 12px;
+      font-size: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      color: #1e293b;
+    }
+    .summary-box .item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .summary-box .label {
+      font-weight: 600;
+      color: #475569;
+    }
+    .summary-box .value {
+      font-weight: 700;
+    }
+    .summary-box .critical {
+      color: #b91c1c;
+    }
+    .summary-box .ok {
+      color: #0b7e4b;
+    }
+
+    .option-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 25px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .option-title { font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+    .option-tag {
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 0.75rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-weight: 600;
+      border: 1px solid #bfdbfe;
+    }
+    .best-tag {
+      background: #fef3c7;
+      color: #b45309;
+      border-color: #fde68a;
+    }
+    .schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-bottom: 30px;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+    }
+    .schedule-table th {
+      background: #f8fafc;
+      color: #475569;
+      font-weight: 700;
+      padding: 8px 4px;
+      font-size: 0.8rem;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .schedule-table td {
+      border: 1px solid var(--border);
+      height: 52px;
+      text-align: center;
+      font-size: 0.7rem;
+      padding: 2px;
+      vertical-align: middle;
+    }
+    .time-col {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #64748b;
+      width: 70px;
+      font-size: 0.7rem !important;
+    }
+    .cell-course {
+      border-radius: 6px;
+      padding: 4px 2px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.7rem;
+      line-height: 1.2;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      cursor: default;
+    }
+    .cell-course .group-lbl {
+      font-size: 0.6rem;
+      font-weight: normal;
+      opacity: 0.9;
+      display: block;
+      margin-top: 2px;
+    }
+    .cell-course .extra-info {
+      font-size: 0.55rem;
+      font-weight: 300;
+      opacity: 0.85;
+      display: block;
+      margin-top: 1px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 6px 0 12px;
+      font-size: 0.75rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+    .table-wrapper { overflow-x: auto; }
+    #loadMoreContainer { text-align: center; margin-top: 20px; }
+    .hidden { display: none; }
+
+    .transfer-config {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .transfer-config .row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .transfer-config .row input, .transfer-config .row select {
+      flex: 1;
+      min-width: 60px;
+    }
+    .transfer-config .row button {
+      flex: 0 0 auto;
+    }
+    .transfer-list {
+      margin-top: 8px;
+      font-size: 0.8rem;
+    }
+    .transfer-list .item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .transfer-list .item .actions {
+      display: flex;
+      gap: 6px;
+    }
+    .transfer-list .item .actions button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 0 4px;
+    }
+    .transfer-list .item .actions .edit-transfer {
+      color: #0d9488;
+    }
+    .transfer-list .item .actions .remove-transfer {
+      color: #dc2626;
+    }
+
+    .share-area {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .share-area button {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .edit-btn {
+      background: #0d9488;
+      color: white;
+      border: none;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .edit-btn:hover { background: #0f766e; }
+
+    /* Estilos para la edición inline de traslados */
+    .inline-edit {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .inline-edit input {
+      width: 50px;
+      padding: 2px 4px;
+      font-size: 0.8rem;
+    }
+    .inline-edit button {
+      background: var(--success);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📚 Generador de Horarios con Compartición</h1>
+  <p>Registra cursos, grupos, profesor, aula y horarios. Define tiempos de traslado específicos. Comparte tu configuración con otros.</p>
+
+  <div class="grid">
+    <!-- Panel izquierdo -->
+    <div class="card">
+      <h2>1. Registrar / Editar</h2>
+      <div id="feedback" class="feedback"></div>
+
+      <div class="form-group">
+        <label for="courseName" class="required">Nombre del Curso</label>
+        <input type="text" id="courseName" placeholder="Ej. Cálculo I" />
+      </div>
+      <div class="form-group">
+        <label for="groupName" class="required">Grupo / Sección</label>
+        <input type="text" id="groupName" placeholder="Ej. Grupo A" />
+      </div>
+      <div class="form-group">
+        <label for="profesorInput">Profesor</label>
+        <input type="text" id="profesorInput" placeholder="Nombre del profesor" />
+      </div>
+
+      <div class="toggle-group">
+        <label>
+          <input type="checkbox" id="fixedAulaToggle" checked />
+          <span>Asignar aula fija</span>
+        </label>
+      </div>
+      <div class="form-group" id="aulaGroup">
+        <label for="aulaInput" class="required">Aula</label>
+        <input type="text" id="aulaInput" placeholder="Ej. A-101" />
+      </div>
+
+      <div class="form-group">
+        <label>Horario del grupo:</label>
+        <div class="row-inline">
+          <select id="daySelect">
+            <option value="Lunes">Lunes</option>
+            <option value="Martes">Martes</option>
+            <option value="Miércoles">Miércoles</option>
+            <option value="Jueves">Jueves</option>
+            <option value="Viernes">Viernes</option>
+            <option value="Sábado">Sábado</option>
+          </select>
+        </div>
+        <div class="row-inline" style="margin-top:6px;">
+          <input type="time" id="startTime" value="07:00" />
+          <input type="time" id="endTime" value="08:40" />
+        </div>
+        <button type="button" id="addSlotBtn" class="btn-secondary" style="margin-top:6px; font-size:0.8rem;">+ Agregar Horario a este Grupo</button>
+      </div>
+      <div id="tempSlotsList" style="margin-bottom:8px; min-height:28px;"></div>
+
+      <button type="button" id="addGroupBtn" class="btn-block btn-success">Guardar Grupo en el Curso</button>
+      <button type="button" id="cancelEditBtn" class="btn-block btn-secondary hidden">Cancelar Edición</button>
+
+      <hr style="margin: 16px 0; border: none; border-top:1px solid var(--border);" />
+
+      <!-- Configuración de traslados -->
+      <div class="form-group">
+        <label for="transferTimeInput">⏱️ Tiempo de traslado por defecto (minutos)</label>
+        <input type="number" id="transferTimeInput" value="15" min="0" max="60" step="1" />
+        <p style="font-size:0.7rem; color:#64748b; margin-top:2px;">Se usa cuando no hay tiempo específico entre dos aulas.</p>
+      </div>
+
+      <div>
+        <button type="button" id="toggleTransferConfig" class="btn-secondary btn-block" style="font-size:0.85rem;">⚙️ Configurar tiempos entre aulas específicas</button>
+        <div id="transferConfigArea" class="transfer-config hidden">
+          <h4 style="margin:0 0 8px;">Agregar par de aulas</h4>
+          <div class="row">
+            <input type="text" id="fromAula" placeholder="Aula origen" style="flex:1;" />
+            <input type="text" id="toAula" placeholder="Aula destino" style="flex:1;" />
+            <input type="number" id="specificTime" placeholder="Minutos" style="flex:0.8;" min="0" step="1" />
+            <button id="addTransferBtn" class="btn-success" style="flex:0 0 auto;">+</button>
+          </div>
+          <div id="transferList" class="transfer-list"></div>
+          <button id="saveTransferConfigBtn" class="btn-secondary btn-block" style="margin-top:8px; font-size:0.8rem;">💾 Guardar configuración</button>
+        </div>
+      </div>
+
+      <hr style="margin: 16px 0; border: none; border-top:1px solid var(--border);" />
+
+      <!-- Interruptor excluir críticos -->
+      <div class="toggle-group">
+        <label>
+          <input type="checkbox" id="excludeCriticalToggle" />
+          <span>🚫 Excluir combinaciones con traslados críticos</span>
+        </label>
+      </div>
+
+      <!-- Área de compartición -->
+      <div style="margin: 12px 0;">
+        <div class="share-area">
+          <button id="exportDataBtn" class="btn-secondary" style="flex:1;">📤 Exportar JSON</button>
+          <button id="importDataBtn" class="btn-secondary" style="flex:1;">📥 Importar JSON</button>
+        </div>
+        <button id="shareLinkBtn" class="btn-share btn-block">🔗 Copiar enlace compartible</button>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0;">Cursos (<span id="courseCount">0</span>)</h3>
+        <button id="clearAllBtn" class="btn-danger" style="padding:4px 12px; font-size:0.75rem;">🗑 Limpiar todo</button>
+      </div>
+      <div id="coursesList"></div>
+
+      <button type="button" id="generateBtn" class="btn-block" style="background:#0b7e4b; font-size:0.95rem; padding:12px;">🔍 Generar y Ordenar Horarios</button>
+    </div>
+
+    <!-- Panel derecho -->
+    <div class="card">
+      <h2>2. Horarios Organizados</h2>
+      <div id="resultsContainer">
+        <p style="color: #64748b;">Ingresa tus cursos y grupos para ver las combinaciones óptimas.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // 1. ESTADO GLOBAL
+  // ============================================================
+  let coursesData = {};
+  let currentSlots = [];
+  let transferTimes = {};
+  let editingCourse = null;
+  let editingGroupName = null;
+  const daysOfWeek = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const courseColors = [
+    "#0d47a1", "#b71c1c", "#1b5e20", "#4a148c", "#e65100",
+    "#004d40", "#880e4f", "#1a237e", "#bf360c", "#33691e",
+    "#4e342e", "#263238", "#0d7377", "#6d1b7b", "#ad1457"
+  ];
+
+  // ============================================================
+  // 2. DOM HELPERS Y FUNCIONES BÁSICAS
+  // ============================================================
+  const $ = id => document.getElementById(id);
+  const feedback = $('feedback');
+
+  function showFeedback(msg, type = 'success') {
+    feedback.textContent = msg;
+    feedback.className = `feedback ${type}`;
+    setTimeout(() => { feedback.className = 'feedback'; }, 4000);
+  }
+
+  function toMinutes(tStr) {
+    const [h, m] = tStr.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function formatTime(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function doSlotsOverlap(slots1, slots2) {
+    for (let s1 of slots1) {
+      for (let s2 of slots2) {
+        if (s1.day === s2.day) {
+          let start1 = toMinutes(s1.start), end1 = toMinutes(s1.end);
+          let start2 = toMinutes(s2.start), end2 = toMinutes(s2.end);
+          if (Math.max(start1, start2) < Math.min(end1, end2)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function getTransferTime(aula1, aula2, defaultTime) {
+    if (!aula1 || !aula2 || aula1 === aula2) return 0;
+    const key1 = `${aula1}|${aula2}`;
+    const key2 = `${aula2}|${aula1}`;
+    if (transferTimes[key1] !== undefined) return transferTimes[key1];
+    if (transferTimes[key2] !== undefined) return transferTimes[key2];
+    return defaultTime;
+  }
+
+  // ============================================================
+  // 3. PERSISTENCIA (localStorage)
+  // ============================================================
+  function saveToStorage() {
+    try { localStorage.setItem('horariosData', JSON.stringify(coursesData)); } catch(e) {}
+  }
+  function loadFromStorage() {
+    try {
+      const data = localStorage.getItem('horariosData');
+      if (data) { coursesData = JSON.parse(data); renderCourses(); updateCourseCount(); return true; }
+    } catch(e) {}
+    return false;
+  }
+  function saveTransferConfig() {
+    try { localStorage.setItem('transferTimes', JSON.stringify(transferTimes)); } catch(e) {}
+  }
+  function loadTransferConfig() {
+    try {
+      const data = localStorage.getItem('transferTimes');
+      if (data) { transferTimes = JSON.parse(data); renderTransferList(); return true; }
+    } catch(e) {}
+    return false;
+  }
+  function saveToggleState() {
+    try {
+      localStorage.setItem('fixedAula', $('fixedAulaToggle').checked);
+      localStorage.setItem('excludeCritical', $('excludeCriticalToggle').checked);
+    } catch(e) {}
+  }
+  function loadToggleState() {
+    try {
+      const fixed = localStorage.getItem('fixedAula');
+      if (fixed !== null) $('fixedAulaToggle').checked = fixed === 'true';
+      const exclude = localStorage.getItem('excludeCritical');
+      if (exclude !== null) $('excludeCriticalToggle').checked = exclude === 'true';
+    } catch(e) {}
+    toggleAulaVisibility();
+  }
+
+  // ============================================================
+  // 4. SLOTS TEMPORALES
+  // ============================================================
+  function renderTempSlots() {
+    const container = $('tempSlotsList');
+    if (currentSlots.length === 0) {
+      container.innerHTML = '<span style="color:#94a3b8; font-size:0.8rem;">Aún no has agregado horarios.</span>';
+      return;
+    }
+    container.innerHTML = currentSlots.map((s, i) =>
+      `<span class="badge badge-group">${s.day} ${s.start}-${s.end} <span class="badge-remove" data-index="${i}">×</span></span>`
+    ).join(' ');
+    container.querySelectorAll('.badge-remove').forEach(el => {
+      el.addEventListener('click', function() {
+        const idx = parseInt(this.dataset.index);
+        currentSlots.splice(idx, 1);
+        renderTempSlots();
+      });
+    });
+  }
+
+  $('addSlotBtn').addEventListener('click', () => {
+    const day = $('daySelect').value;
+    const start = $('startTime').value;
+    const end = $('endTime').value;
+    if (!start || !end) { showFeedback('Selecciona hora de inicio y fin.', 'error'); return; }
+    if (start >= end) { showFeedback('La hora de inicio debe ser menor que la de fin.', 'error'); return; }
+    if (currentSlots.some(s => s.day === day && s.start === start && s.end === end)) {
+      showFeedback('Este horario ya está agregado.', 'error');
+      return;
+    }
+    currentSlots.push({ day, start, end });
+    renderTempSlots();
+    showFeedback('Horario agregado al grupo temporal.', 'success');
+  });
+
+  // ============================================================
+  // 5. TOGGLE AULA FIJA
+  // ============================================================
+  function toggleAulaVisibility() {
+    const checked = $('fixedAulaToggle').checked;
+    const aulaGroup = $('aulaGroup');
+    const aulaInput = $('aulaInput');
+    if (checked) {
+      aulaGroup.style.display = 'block';
+      aulaInput.required = true;
+      aulaInput.disabled = false;
+    } else {
+      aulaGroup.style.display = 'none';
+      aulaInput.required = false;
+      aulaInput.disabled = true;
+      aulaInput.value = '';
+    }
+    saveToggleState();
+  }
+  $('fixedAulaToggle').addEventListener('change', toggleAulaVisibility);
+
+  // ============================================================
+  // 6. AGREGAR / ACTUALIZAR GRUPO
+  // ============================================================
+  function resetEditMode() {
+    editingCourse = null;
+    editingGroupName = null;
+    $('addGroupBtn').textContent = 'Guardar Grupo en el Curso';
+    $('cancelEditBtn').classList.add('hidden');
+    $('courseName').value = '';
+    $('groupName').value = '';
+    $('profesorInput').value = '';
+    $('aulaInput').value = '';
+    currentSlots = [];
+    renderTempSlots();
+  }
+
+  $('cancelEditBtn').addEventListener('click', resetEditMode);
+
+  $('addGroupBtn').addEventListener('click', () => {
+    const cName = $('courseName').value.trim();
+    const gName = $('groupName').value.trim();
+    const profesor = $('profesorInput').value.trim();
+    let aula = $('aulaInput').value.trim();
+
+    if (!cName || !gName) { showFeedback('Ingresa nombre del curso y del grupo.', 'error'); return; }
+    if (currentSlots.length === 0) { showFeedback('Añade al menos un horario al grupo.', 'error'); return; }
+    if (!$('fixedAulaToggle').checked) { aula = ''; }
+    else if (!aula) { showFeedback('El aula es obligatoria porque tienes activado "Asignar aula fija".', 'error'); return; }
+
+    if (editingCourse && editingGroupName) {
+      const groups = coursesData[editingCourse];
+      const idx = groups.findIndex(g => g.group === editingGroupName);
+      if (idx === -1) { showFeedback('Error: el grupo ya no existe.', 'error'); resetEditMode(); return; }
+      groups[idx] = { group: gName, profesor: profesor || 'N/A', aula: aula || '', slots: [...currentSlots] };
+      if (cName !== editingCourse) {
+        groups.splice(idx, 1);
+        if (groups.length === 0) delete coursesData[editingCourse];
+        if (!coursesData[cName]) coursesData[cName] = [];
+        coursesData[cName].push(groups[idx]);
+      }
+      showFeedback(`Grupo "${gName}" actualizado.`, 'success');
+      resetEditMode();
+      renderCourses();
+      updateCourseCount();
+      saveToStorage();
+      return;
+    }
+
+    // Nuevo grupo
+    if (!coursesData[cName]) coursesData[cName] = [];
+    const existingIndex = coursesData[cName].findIndex(g => g.group.toLowerCase() === gName.toLowerCase());
+    if (existingIndex !== -1) {
+      if (!confirm(`El grupo "${gName}" ya existe para "${cName}". ¿Reemplazar?`)) return;
+      coursesData[cName][existingIndex] = { group: gName, profesor: profesor || 'N/A', aula: aula || '', slots: [...currentSlots] };
+      showFeedback(`Grupo "${gName}" actualizado.`, 'success');
+    } else {
+      coursesData[cName].push({ group: gName, profesor: profesor || 'N/A', aula: aula || '', slots: [...currentSlots] });
+      showFeedback(`Grupo "${gName}" agregado a "${cName}".`, 'success');
+    }
+    currentSlots = [];
+    renderTempSlots();
+    $('groupName').value = '';
+    $('profesorInput').value = '';
+    $('aulaInput').value = '';
+    renderCourses();
+    updateCourseCount();
+    saveToStorage();
+  });
+
+  // ============================================================
+  // 7. RENDERIZAR CURSOS (con edición)
+  // ============================================================
+  function renderCourses() {
+    const container = $('coursesList');
+    container.innerHTML = '';
+    const keys = Object.keys(coursesData);
+    if (keys.length === 0) {
+      container.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem;">No hay cursos registrados.</p>';
+      return;
+    }
+    keys.forEach(cName => {
+      const div = document.createElement('div');
+      div.className = 'course-card';
+      let html = `<div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>${cName}</strong>
+        <div>
+          <button class="edit-btn" data-action="edit-course" data-course="${cName}">✎ Editar Curso</button>
+          <button class="btn-danger" style="padding:2px 8px; font-size:0.7rem;" data-action="delete-course" data-course="${cName}">Borrar</button>
+        </div>
+      </div>`;
+      coursesData[cName].forEach((g, groupIdx) => {
+        const aulaDisplay = g.aula ? `Aula: ${g.aula}` : 'Sin aula';
+        html += `<div style="margin-top:4px; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>${g.group}</strong> 
+            <span style="color:#475569; font-size:0.7rem;">(Prof: ${g.profesor || 'N/A'}, ${aulaDisplay})</span>
+            : `;
+        g.slots.forEach((s, slotIdx) => {
+          html += `<span class="badge">${s.day.substring(0,2)} ${s.start}-${s.end} 
+            <span data-action="delete-slot" data-course="${cName}" data-group="${g.group}" data-slot="${slotIdx}" style="cursor:pointer;color:#dc2626;font-weight:bold;">✕</span>
+          </span>`;
+        });
+        html += `</div>
+          <div>
+            <button class="edit-btn" data-action="edit-group" data-course="${cName}" data-group="${g.group}">✎</button>
+            <button class="btn-danger" style="padding:2px 8px; font-size:0.7rem;" data-action="delete-group" data-course="${cName}" data-group="${g.group}">Borrar</button>
+          </div>
+        </div>`;
+      });
+      div.innerHTML = html;
+      container.appendChild(div);
+    });
+    updateCourseCount();
+  }
+
+  function updateCourseCount() {
+    $('courseCount').textContent = Object.keys(coursesData).length;
+  }
+
+  // ============================================================
+  // 8. MANEJO DE EDICIÓN Y ELIMINACIÓN
+  // ============================================================
+  $('coursesList').addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const action = target.dataset.action;
+    const course = target.dataset.course;
+    const groupName = target.dataset.group;
+
+    if (action === 'delete-course') {
+      if (confirm(`¿Eliminar el curso "${course}" y todos sus grupos?`)) {
+        delete coursesData[course];
+        renderCourses();
+        saveToStorage();
+        showFeedback(`Curso "${course}" eliminado.`, 'success');
+      }
+    } 
+    else if (action === 'delete-group') {
+      if (confirm(`¿Eliminar el grupo "${groupName}" del curso "${course}"?`)) {
+        const groups = coursesData[course];
+        const idx = groups.findIndex(g => g.group === groupName);
+        if (idx !== -1) {
+          groups.splice(idx, 1);
+          if (groups.length === 0) delete coursesData[course];
+          renderCourses();
+          saveToStorage();
+          showFeedback(`Grupo "${groupName}" eliminado.`, 'success');
+        }
+      }
+    } 
+    else if (action === 'delete-slot') {
+      const slotIdx = parseInt(target.dataset.slot);
+      const groups = coursesData[course];
+      const group = groups.find(g => g.group === groupName);
+      if (group) {
+        if (group.slots.length <= 1) {
+          if (confirm(`El grupo "${groupName}" solo tiene un horario. ¿Eliminar todo el grupo?`)) {
+            const idx = groups.findIndex(g => g.group === groupName);
+            if (idx !== -1) {
+              groups.splice(idx, 1);
+              if (groups.length === 0) delete coursesData[course];
+              renderCourses();
+              saveToStorage();
+              showFeedback(`Grupo "${groupName}" eliminado.`, 'success');
+            }
+          }
+        } else {
+          if (confirm(`¿Eliminar este horario del grupo "${groupName}"?`)) {
+            group.slots.splice(slotIdx, 1);
+            renderCourses();
+            saveToStorage();
+            showFeedback(`Horario eliminado del grupo "${groupName}".`, 'success');
+          }
+        }
+      }
+    }
+    else if (action === 'edit-course') {
+      const newName = prompt('Nuevo nombre para el curso:', course);
+      if (!newName || newName === course) return;
+      if (coursesData[newName]) {
+        if (!confirm(`Ya existe un curso con el nombre "${newName}". ¿Fusionar?`)) return;
+        coursesData[newName].push(...coursesData[course]);
+      } else {
+        coursesData[newName] = coursesData[course];
+      }
+      delete coursesData[course];
+      renderCourses();
+      saveToStorage();
+      showFeedback(`Curso renombrado a "${newName}".`, 'success');
+    }
+    else if (action === 'edit-group') {
+      const groups = coursesData[course];
+      const group = groups.find(g => g.group === groupName);
+      if (!group) return;
+      $('courseName').value = course;
+      $('groupName').value = group.group;
+      $('profesorInput').value = group.profesor || '';
+      $('aulaInput').value = group.aula || '';
+      currentSlots = group.slots.map(s => ({ day: s.day, start: s.start, end: s.end }));
+      renderTempSlots();
+      editingCourse = course;
+      editingGroupName = group.group;
+      $('addGroupBtn').textContent = 'Actualizar Grupo';
+      $('cancelEditBtn').classList.remove('hidden');
+      showFeedback(`Editando grupo "${group.group}" del curso "${course}".`, 'warning');
+      document.querySelector('.card').scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // ============================================================
+  // 9. LIMPIAR TODO
+  // ============================================================
+  $('clearAllBtn').addEventListener('click', () => {
+    if (Object.keys(coursesData).length === 0) return;
+    if (confirm('¿Eliminar todos los cursos?')) {
+      coursesData = {};
+      renderCourses();
+      updateCourseCount();
+      saveToStorage();
+      $('resultsContainer').innerHTML = '<p style="color:#64748b;">Datos limpiados.</p>';
+      showFeedback('Todos los datos eliminados.', 'success');
+    }
+  });
+
+  // ============================================================
+  // 10. CONFIGURACIÓN DE TRASLADOS (con edición inline)
+  // ============================================================
+  function renderTransferList() {
+    const container = $('transferList');
+    const keys = Object.keys(transferTimes);
+    if (keys.length === 0) {
+      container.innerHTML = '<p style="color:#94a3b8; font-size:0.8rem;">No hay tiempos específicos configurados.</p>';
+      return;
+    }
+    let html = '';
+    keys.forEach(key => {
+      const [aula1, aula2] = key.split('|');
+      const time = transferTimes[key];
+      html += `<div class="item" data-key="${key}">
+        <span>${aula1} → ${aula2}: <strong class="time-display">${time} min</strong></span>
+        <div class="actions">
+          <button class="edit-transfer" data-action="edit-transfer" data-key="${key}">✎</button>
+          <button class="remove-transfer" data-action="remove-transfer" data-key="${key}">✕</button>
+        </div>
+      </div>`;
+    });
+    container.innerHTML = html;
+
+    // Eventos para eliminar y editar
+    container.querySelectorAll('[data-action="remove-transfer"]').forEach(el => {
+      el.addEventListener('click', function() {
+        const key = this.dataset.key;
+        delete transferTimes[key];
+        renderTransferList();
+        saveTransferConfig();
+        showFeedback(`Tiempo de traslado eliminado.`, 'success');
+      });
+    });
+
+    container.querySelectorAll('[data-action="edit-transfer"]').forEach(el => {
+      el.addEventListener('click', function() {
+        const key = this.dataset.key;
+        const currentTime = transferTimes[key];
+        const newTime = prompt(`Editar tiempo para ${key.replace('|', ' → ')}:`, currentTime);
+        if (newTime === null) return;
+        const val = parseInt(newTime);
+        if (isNaN(val) || val < 0) { showFeedback('Ingresa un número válido.', 'error'); return; }
+        transferTimes[key] = val;
+        renderTransferList();
+        saveTransferConfig();
+        showFeedback(`Tiempo actualizado a ${val} min.`, 'success');
+      });
+    });
+  }
+
+  $('addTransferBtn').addEventListener('click', () => {
+    const from = $('fromAula').value.trim();
+    const to = $('toAula').value.trim();
+    const time = parseInt($('specificTime').value);
+    if (!from || !to || isNaN(time) || time < 0) {
+      showFeedback('Completa todos los campos correctamente.', 'error');
+      return;
+    }
+    if (from === to) { showFeedback('El origen y destino no pueden ser iguales.', 'error'); return; }
+    const key = `${from}|${to}`;
+    transferTimes[key] = time;
+    renderTransferList();
+    saveTransferConfig();
+    $('fromAula').value = '';
+    $('toAula').value = '';
+    $('specificTime').value = '';
+    showFeedback(`Traslado ${from} → ${to}: ${time} min agregado.`, 'success');
+  });
+
+  $('saveTransferConfigBtn').addEventListener('click', () => {
+    saveTransferConfig();
+    showFeedback('Configuración de traslados guardada.', 'success');
+  });
+
+  let transferConfigVisible = false;
+  $('toggleTransferConfig').addEventListener('click', function() {
+    transferConfigVisible = !transferConfigVisible;
+    $('transferConfigArea').classList.toggle('hidden', !transferConfigVisible);
+    this.textContent = transferConfigVisible ? '🔽 Ocultar configuración' : '⚙️ Configurar tiempos entre aulas específicas';
+  });
+
+  // ============================================================
+  // 11. EXPORTAR / IMPORTAR / COMPARTIR
+  // ============================================================
+  function getFullConfig() {
+    return {
+      version: '1.0',
+      coursesData: coursesData,
+      transferTimes: transferTimes,
+      defaultTransferTime: parseInt($('transferTimeInput').value) || 15,
+      fixedAula: $('fixedAulaToggle').checked,
+      excludeCritical: $('excludeCriticalToggle').checked
+    };
+  }
+
+  function loadFullConfig(data) {
+    if (!data || typeof data !== 'object') return false;
+    coursesData = data.coursesData || {};
+    transferTimes = data.transferTimes || {};
+    if (data.defaultTransferTime !== undefined) $('transferTimeInput').value = data.defaultTransferTime;
+    if (data.fixedAula !== undefined) $('fixedAulaToggle').checked = data.fixedAula;
+    if (data.excludeCritical !== undefined) $('excludeCriticalToggle').checked = data.excludeCritical;
+    toggleAulaVisibility();
+    saveToStorage();
+    saveTransferConfig();
+    renderCourses();
+    renderTransferList();
+    updateCourseCount();
+    return true;
+  }
+
+  // Exportar JSON
+  $('exportDataBtn').addEventListener('click', () => {
+    const config = getFullConfig();
+    const json = JSON.stringify(config, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `horarios-config-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showFeedback('Configuración exportada.', 'success');
+  });
+
+  // Importar JSON
+  $('importDataBtn').addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = function(e) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (loadFullConfig(data)) {
+            showFeedback('Configuración importada correctamente.', 'success');
+          } else {
+            showFeedback('Formato de archivo inválido.', 'error');
+          }
+        } catch(err) {
+          showFeedback('Error al leer el archivo.', 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+
+  // Compartir enlace (codificado con lz-string)
+  $('shareLinkBtn').addEventListener('click', () => {
+    const config = getFullConfig();
+    const json = JSON.stringify(config);
+    // Comprimir con lz-string
+    const compressed = LZString.compressToEncodedURIComponent(json);
+    // Construir URL actual con el parámetro data
+    const url = new URL(window.location.href);
+    url.searchParams.set('data', compressed);
+    const shareable = url.toString();
+    // Copiar al portapapeles
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareable).then(() => {
+        showFeedback('Enlace copiado al portapapeles. Compártelo con otros.', 'success');
+      }).catch(() => {
+        // Fallback
+        prompt('Copia este enlace:', shareable);
+      });
+    } else {
+      prompt('Copia este enlace:', shareable);
+    }
+  });
+
+  // Cargar datos desde URL al iniciar
+  function loadFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const dataParam = params.get('data');
+    if (!dataParam) return false;
+    try {
+      const json = LZString.decompressFromEncodedURIComponent(dataParam);
+      if (!json) return false;
+      const config = JSON.parse(json);
+      if (loadFullConfig(config)) {
+        showFeedback('Datos cargados desde el enlace.', 'success');
+        return true;
+      }
+    } catch(e) {}
+    return false;
+  }
+
+  // ============================================================
+  // 12. CÁLCULO DE SCORE Y GENERACIÓN
+  // ============================================================
+  function calculateScore(combination, defaultTransferTime) {
+    let gapMinutes = 0, totalTransferTime = 0, criticalTransfers = 0;
+    let daysUsed = new Set();
+    daysOfWeek.forEach(day => {
+      let dayClasses = [];
+      combination.forEach(item => {
+        item.group.slots.forEach(s => {
+          if (s.day === day) {
+            dayClasses.push({
+              start: toMinutes(s.start),
+              end: toMinutes(s.end),
+              aula: item.group.aula || '',
+              curso: item.course,
+              grupo: item.group.group
+            });
+            daysUsed.add(day);
+          }
+        });
+      });
+      if (dayClasses.length > 1) {
+        dayClasses.sort((a, b) => a.start - b.start);
+        for (let i = 0; i < dayClasses.length - 1; i++) {
+          const current = dayClasses[i];
+          const next = dayClasses[i+1];
+          const gap = next.start - current.end;
+          if (gap >= 0) {
+            const transferTime = getTransferTime(current.aula, next.aula, defaultTransferTime);
+            totalTransferTime += transferTime;
+            const effectiveGap = gap - transferTime;
+            if (effectiveGap < 0) {
+              gapMinutes += -effectiveGap;
+              criticalTransfers++;
+            } else {
+              gapMinutes += effectiveGap;
+            }
+          }
+        }
+      }
+    });
+    const daysPenalty = (daysUsed.size - 1) * 60;
+    const score = gapMinutes + daysPenalty;
+    return { score, gapMinutes, totalTransferTime, criticalTransfers };
+  }
+
+  function generateCombinations(coursesData, defaultTransferTime) {
+    const courseNames = Object.keys(coursesData);
+    if (courseNames.length === 0) return [];
+    let allCombinations = [];
+    function backtrack(index, current) {
+      if (index === courseNames.length) {
+        const result = calculateScore(current, defaultTransferTime);
+        allCombinations.push({ 
+          schedule: [...current], 
+          score: result.score,
+          gapMinutes: result.gapMinutes,
+          totalTransferTime: result.totalTransferTime,
+          criticalTransfers: result.criticalTransfers
+        });
+        return;
+      }
+      const cName = courseNames[index];
+      const groups = coursesData[cName];
+      for (let g of groups) {
+        let conflict = false;
+        for (let entry of current) {
+          if (doSlotsOverlap(entry.group.slots, g.slots)) {
+            conflict = true;
+            break;
+          }
+        }
+        if (!conflict) {
+          current.push({ course: cName, group: g });
+          backtrack(index + 1, current);
+          current.pop();
+        }
+      }
+    }
+    backtrack(0, []);
+    allCombinations.sort((a, b) => a.score - b.score);
+    return allCombinations;
+  }
+
+  // ============================================================
+  // 13. RENDERIZADO DE RESULTADOS (con paginación)
+  // ============================================================
+  let allCombinationsGlobal = [];
+  let colorMapGlobal = {};
+  let currentLimit = 0;
+  const BATCH_SIZE = 15;
+
+  function renderVisualResults(combinations, courseNames) {
+    const container = $('resultsContainer');
+    if (combinations.length === 0) {
+      container.innerHTML = `<div style="background:#fee2e2; border:1px solid #fecaca; color:#991b1b; padding:15px; border-radius:8px;">
+        ❌ <strong>No hay combinaciones sin cruces.</strong><br>Agrega más opciones.
+      </div>`;
+      return;
+    }
+    window.allCombinationsGlobal = combinations;
+    window.currentLimit = 0;
+    let colorMap = {};
+    courseNames.forEach((name, i) => {
+      colorMap[name] = courseColors[i % courseColors.length];
+    });
+    window.colorMapGlobal = colorMap;
+
+    container.innerHTML = `
+      <div class="stats-box">
+        🎉 <strong>${combinations.length}</strong> combinaciones.<br>
+        <span style="font-size:0.9rem;">Mostrando <span id="displayCount">0</span> de ${combinations.length}.</span>
+      </div>
+      <div id="scheduleListContainer"></div>
+      <div id="loadMoreContainer"></div>
+    `;
+    loadMoreBatch();
+  }
+
+  function loadMoreBatch() {
+    const container = $('scheduleListContainer');
+    const combinations = window.allCombinationsGlobal;
+    const colorMap = window.colorMapGlobal;
+    const total = combinations.length;
+    let start = window.currentLimit;
+    let end = Math.min(start + BATCH_SIZE, total);
+    if (start >= total) return;
+    if (start === 0) container.innerHTML = '';
+
+    for (let idx = start; idx < end; idx++) {
+      const combObj = combinations[idx];
+      const comb = combObj.schedule;
+      const score = combObj.score;
+      const gapHours = (score / 60).toFixed(1);
+      const isBest = (idx === 0);
+      const critical = combObj.criticalTransfers || 0;
+      const gapMinutes = combObj.gapMinutes || 0;
+      const totalTransferTime = combObj.totalTransferTime || 0;
+
+      let html = `
+        <div class="option-header">
+          <div class="option-title">
+            Opción #${idx + 1} ${isBest ? '⭐ <span style="color:#d97706;">(Mejor)</span>' : ''}
+          </div>
+          <div class="option-tag ${isBest ? 'best-tag' : ''}">
+            Score: <strong>${gapHours} h</strong>
+          </div>
+        </div>
+        <div class="summary-box">
+          <span class="item"><span class="label">⏳ Huecos:</span> <span class="value">${gapMinutes} min</span></span>
+          <span class="item"><span class="label">🚶 Traslados:</span> <span class="value">${totalTransferTime} min</span></span>
+          <span class="item"><span class="label">⚠️ Críticos:</span> <span class="value ${critical > 0 ? 'critical' : 'ok'}">${critical}</span></span>
+        </div>
+        ${critical > 0 ? `<div class="warning-box">⚠️ <strong>${critical} traslado(s) crítico(s)</strong> (tiempo insuficiente).</div>` : 
+                         `<div class="warning-box" style="background:#d1fae5; border-color:#a7f3d0; color:#065f46;">✅ <strong>Sin traslados críticos</strong>.</div>`}
+        <div class="legend">
+          ${[...new Set(comb.map(item => item.course))].map(c => `<span class="legend-item"><span class="legend-color" style="background:${colorMap[c]};"></span> ${c}</span>`).join('')}
+        </div>
+        <div class="table-wrapper"><table class="schedule-table"><thead><tr><th class="time-col">Hora</th>`;
+      daysOfWeek.forEach(d => html += `<th>${d}</th>`);
+      html += `</tr></thead><tbody>`;
+
+      let minHour = 24, maxHour = 0;
+      comb.forEach(item => {
+        item.group.slots.forEach(s => {
+          let st = parseInt(s.start.split(':')[0]);
+          let et = Math.ceil(toMinutes(s.end)/60);
+          if (st < minHour) minHour = st;
+          if (et > maxHour) maxHour = et;
+        });
+      });
+      if (minHour > maxHour) { minHour = 7; maxHour = 18; }
+
+      for (let h = minHour; h < maxHour; h++) {
+        const hStart = formatTime(h * 60);
+        const hEnd = formatTime((h + 1) * 60);
+        html += `<tr><td class="time-col">${hStart}<br>${hEnd}</td>`;
+        daysOfWeek.forEach(day => {
+          let cellContent = "";
+          comb.forEach(item => {
+            item.group.slots.forEach(s => {
+              if (s.day === day) {
+                let stMin = toMinutes(s.start);
+                let etMin = toMinutes(s.end);
+                let currentStart = h * 60;
+                let currentEnd = (h + 1) * 60;
+                if (Math.max(stMin, currentStart) < Math.min(etMin, currentEnd)) {
+                  let bgColor = colorMap[item.course];
+                  const prof = item.group.profesor || 'N/A';
+                  const aula = item.group.aula || 'Sin aula';
+                  const horario = `${s.start} - ${s.end}`;
+                  cellContent = `
+                    <div class="cell-course" style="background:${bgColor};" title="${item.course} (${item.group.group})\nProf: ${prof}\nAula: ${aula}\nHorario: ${horario}">
+                      ${item.course}
+                      <span class="group-lbl">(${item.group.group})</span>
+                      <span class="extra-info">${aula} · ${prof}</span>
+                      <span class="extra-info" style="font-weight:400;">${horario}</span>
+                    </div>
+                  `;
+                }
+              }
+            });
+          });
+          html += `<td>${cellContent}</td>`;
+        });
+        html += `</tr>`;
+      }
+      html += `</tbody></table></div>`;
+      container.innerHTML += html;
+    }
+
+    // Actualizar contador
+    const displaySpan = $('displayCount');
+    if (displaySpan) displaySpan.textContent = end;
+    window.currentLimit = end;
+
+    const loadContainer = $('loadMoreContainer');
+    if (end >= total) {
+      loadContainer.innerHTML = `<p style="color:#64748b;">✅ Todas las ${total} combinaciones mostradas.</p>`;
+    } else {
+      const remaining = total - end;
+      loadContainer.innerHTML = `
+        <button id="loadMoreBtn" class="btn-block" style="max-width:400px; margin:0 auto; background:#4f46e5;">
+          Cargar siguientes ${Math.min(BATCH_SIZE, remaining)} (${remaining} restantes)
+        </button>
+        <br>
+        <button id="loadAllBtn" class="btn-block" style="max-width:400px; margin:10px auto 0; background:#dc2626; font-size:0.85rem;">
+          ⚠️ Cargar todos (${total} tablas)
+        </button>
+      `;
+      $('loadMoreBtn').addEventListener('click', loadMoreBatch);
+      $('loadAllBtn').addEventListener('click', () => {
+        if (total > 200 && !confirm(`Renderizar ${total} tablas puede ralentizar. ¿Continuar?`)) return;
+        function loadAll() {
+          if (window.currentLimit >= total) return;
+          loadMoreBatch();
+          requestAnimationFrame(loadAll);
+        }
+        loadAll();
+        loadContainer.innerHTML = `<p style="color:#64748b;">Cargando todas...</p>`;
+      });
+    }
+  }
+
+  // ============================================================
+  // 14. EVENTO GENERAR
+  // ============================================================
+  $('generateBtn').addEventListener('click', () => {
+    const courseNames = Object.keys(coursesData);
+    if (courseNames.length === 0) { showFeedback('Registra al menos un curso.', 'error'); return; }
+    for (let c of courseNames) {
+      if (coursesData[c].length === 0) { showFeedback(`El curso "${c}" no tiene grupos.`, 'error'); return; }
+    }
+
+    const defaultTransferTime = parseInt($('transferTimeInput').value) || 15;
+    let combinations = generateCombinations(coursesData, defaultTransferTime);
+
+    const excludeCritical = $('excludeCriticalToggle').checked;
+    if (excludeCritical) {
+      const filtered = combinations.filter(comb => comb.criticalTransfers === 0);
+      if (filtered.length === 0) {
+        showFeedback('No hay combinaciones sin traslados críticos. Desactiva el filtro.', 'warning');
+        $('resultsContainer').innerHTML = `
+          <div style="background:#fef3c7; border:1px solid #fde68a; color:#92400e; padding:15px; border-radius:8px;">
+            ⚠️ <strong>No se encontraron combinaciones sin traslados críticos.</strong><br>
+            Todas las opciones tienen al menos un traslado con tiempo insuficiente.<br>
+            Desactiva el filtro para verlas todas.
+          </div>
+        `;
+        return;
+      }
+      combinations = filtered;
+      showFeedback(`Mostrando ${combinations.length} sin traslados críticos.`, 'success');
+    }
+
+    renderVisualResults(combinations, courseNames);
+    if (!excludeCritical) showFeedback(`Generadas ${combinations.length} combinaciones.`, 'success');
+  });
+
+  // ============================================================
+  // 15. EXPORTAR IMAGEN
+  // ============================================================
+  window.exportScheduleAsImage = function(optionIndex) {
+    const tables = document.querySelectorAll('.schedule-table');
+    if (optionIndex >= tables.length) { alert('Opción no disponible'); return; }
+    const target = tables[optionIndex];
+    html2canvas(target, { scale: 2 }).then(canvas => {
+      const link = document.createElement('a');
+      link.download = `horario_opcion_${optionIndex+1}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }).catch(err => alert('Error al exportar: ' + err));
+  };
+
+  // ============================================================
+  // 16. INICIALIZACIÓN
+  // ============================================================
+  // Primero intentar cargar desde URL (compartir)
+  if (!loadFromURL()) {
+    loadFromStorage();
+    loadTransferConfig();
+    loadToggleState();
+  } else {
+    // Ya se cargó, pero refrescamos interfaz
+    renderCourses();
+    renderTransferList();
+    updateCourseCount();
+  }
+
+  // Cargar tiempo por defecto
+  try {
+    const savedDefault = localStorage.getItem('defaultTransferTime');
+    if (savedDefault) $('transferTimeInput').value = savedDefault;
+  } catch(e) {}
+  $('transferTimeInput').addEventListener('change', function() {
+    localStorage.setItem('defaultTransferTime', this.value);
+  });
+
+  $('excludeCriticalToggle').addEventListener('change', saveToggleState);
+
+  renderTempSlots();
+  renderTransferList();
+  renderCourses();
+  updateCourseCount();
+
+  if (Object.keys(coursesData).length > 0) {
+    showFeedback('Datos cargados correctamente.', 'success');
+  }
+</script>
+</body>
+</html>
